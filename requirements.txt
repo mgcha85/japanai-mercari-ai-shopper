@@ -1,0 +1,25 @@
+requests
+beautifulsoup4
+lxml
+pydantic
+tenacity
+httpx
+tqdm
+python-dotenv
+
+# Web Framework (for API)
+fastapi
+uvicorn
+
+# LLM SDKs
+openai
+anthropic
+
+# Scraping (fallback)
+playwright
+
+# Dev / Test
+pytest
+pytest-cov
+ruff
+black
