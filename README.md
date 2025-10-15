@@ -1,17 +1,3 @@
-좋아요 👍
-아래는 `README.md`와 `requirements.txt`의 **초기 완성본**이야.
-버전은 모두 제거했고, `mercari-ai-shopper`의 구조 및 목적을 기준으로 작성했어.
-PowerShell 명령어로 자동 작성할 수 있게끔 `Set-Content`를 같이 포함했어.
-
----
-
-## ✅ PowerShell 명령어
-
-아래를 `mercari-ai-shopper` 폴더 내부에서 실행하세요 👇
-
-```powershell
-# --- README.md 생성 ---
-$readme = @"
 # 🛍️ Mercari AI Shopper
 
 **Mercari Japan AI Shopper** is a Python-based intelligent agent that:
@@ -151,6 +137,3 @@ OpenAI 또는 Anthropic 중 하나를 선택해 사용할 수 있습니다.
 ## 🧾 License
 
 MIT License © 2025 Mingyu Cha
-"@
-Set-Content -Path "README.md" -Value $readme -Encoding UTF8
-
