@@ -134,6 +134,47 @@ OpenAI 또는 Anthropic 중 하나를 선택해 사용할 수 있습니다.
 
 ---
 
+### pyTest
+---
+
+### 1) 유닛: 랭킹/설명
+
+```bash
+docker compose run --rm tests pytest tests/unit/test_reasoning_ranker.py -q
+```
+
+### 2) 통합: 서버 API (모킹)
+
+```bash
+docker compose run --rm tests pytest tests/integration/test_server.py -q
+```
+
+### 3) 전체 유닛/통합 한 번에
+
+```bash
+docker compose run --rm tests pytest -q
+```
+
+### 4) 라이브 크롤링 스모크 (옵션: 실제 웹 요청)
+
+```bash
+LIVE_WEB=1 docker compose run --rm tests pytest tests/integration/test_scraping_search_live.py -q
+```
+
+### 5) CLI E2E (옵션: 스킵 풀려있다면)
+
+```bash
+docker compose run --rm tests pytest tests/e2e/test_cli_e2e.py -q
+```
+
+### 6) 린트/포매터 체크
+
+```bash
+docker compose run --rm lint
+```
+
+---
+
 ## 🧾 License
 
 MIT License © 2025 Mingyu Cha

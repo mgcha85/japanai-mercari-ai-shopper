@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
-import sys
 from typing import List
 
 from mercari_ai_shopper.models.query import SearchQuery

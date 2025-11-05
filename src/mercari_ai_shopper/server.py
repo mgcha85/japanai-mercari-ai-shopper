@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional, List
 
 from fastapi import FastAPI, Body
 from pydantic import BaseModel

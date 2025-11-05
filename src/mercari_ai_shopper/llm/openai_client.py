@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Dict, Any, List, Callable, Optional
+from typing import Dict, Any, List, Callable
 
 # OpenAI SDK는 requirements에 포함되어 있음
 try:

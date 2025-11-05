@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import logging
-from typing import List, Optional
+from typing import List
 
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright

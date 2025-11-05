@@ -4,7 +4,7 @@ import os
 import re
 import time
 import logging
-from typing import Iterable, List, Optional
+from typing import List, Optional
 from urllib.parse import urlencode, urljoin
 
 import requests

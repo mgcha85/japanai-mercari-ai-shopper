@@ -12,6 +12,6 @@ def test_rank_and_explain_simple():
                 shipping=None, url="https://jp.mercari.com/item/2"),
     ]
     ranked = rank_and_explain(items, q, top_k=2)
-    assert ranked[0].listing.url.endswith("/1")
+    assert str(ranked[0].listing.url).endswith("/1")
     assert ranked[0].score >= ranked[1].score
     assert ranked[0].reasons  # at least one reason

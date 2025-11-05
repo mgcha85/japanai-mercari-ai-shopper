@@ -21,7 +21,7 @@ def test_search_endpoint_monkeypatch(monkeypatch):
                     url="https://jp.mercari.com/item/def"),
         ]
 
-    monkeypatch.setattr(mc, "search", fake_search)
+    monkeypatch.setattr("mercari_ai_shopper.server.http_search", fake_search)
 
     c = TestClient(app)
     payload = {
