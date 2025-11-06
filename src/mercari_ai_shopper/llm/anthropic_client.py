@@ -1,126 +1,101 @@
-from __future__ import annotations
-
+import anthropic
 import os
-from typing import Dict, Any, List, Callable
-
-# anthropic SDK
-try:
-    import anthropic
-except Exception:  # noqa: BLE001
-    anthropic = None  # type: ignore[assignment]
+from typing import List, Dict, Any
 
 
 class AnthropicClient:
-    """
-    Anthropic tool-use 루프 (Claude 3.5 Sonnet 등).
-    - Anthropic는 OpenAI와 message 포맷이 다르므로 변환 어댑터를 둔다.
-    """
-
-    def __init__(self, model: str = None):
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        if not api_key:
-            raise RuntimeError("ANTHROPIC_API_KEY is not set in environment.")
-        if anthropic is None:
-            raise RuntimeError("anthropic SDK is not available. Please install 'anthropic' package.")
-        self.client = anthropic.Anthropic(api_key=api_key)
-        self.model = model or os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20240620")
-
-    @staticmethod
-    def _convert_to_anthropic_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def __init__(self, model: str | None = None, max_tokens: int = 1024):
+        self.client = anthropic.Anthropic()
+        self.model = model or os.getenv("ANTHROPIC_MODEL", "claude-3-7-sonnet-20250219")
+        self.max_tokens = max_tokens
+        
+    def _to_anthropic_tools(self, tools):
         """
-        OpenAI 스타일 messages → Anthropic input 변환.
-        - system은 별도 system 매개로
-        - tool 메시지는 'tool_result'로
+        Normalize tool schema to Anthropic format: [{"name","description","input_schema"}...]
+        Supports:
+        - OpenAI: {"type":"function","function":{"name","description","parameters"}}
+        - Flat:   {"name","description","parameters"}
+        - Native: {"name","description","input_schema"}
         """
-        converted: List[Dict[str, Any]] = []
-        for m in messages:
-            role = m.get("role")
-            if role == "system":
-                # system은 별도 처리하므로 skip
-                continue
-            elif role == "user":
-                converted.append({"role": "user", "content": m.get("content", "")})
-            elif role == "assistant":
-                # assistant가 tool_call을 제안하는 경우 Anthropic에서 자동으로 tool 사용 의도를 내보냄
-                converted.append({"role": "assistant", "content": m.get("content", "")})
-            elif role == "tool":
-                # Anthropic 포맷: tool_result
-                converted.append(
-                    {
-                        "role": "tool",
-                        "content": m.get("content", ""),
-                        "name": m.get("name"),
-                        "tool_use_id": m.get("tool_call_id"),
-                    }
-                )
-        return converted
-
-    def run_loop(
-        self,
-        messages: List[Dict[str, Any]],
-        tools: List[Dict[str, Any]],
-        tool_registry: Dict[str, Callable[[Dict[str, Any]], Any]],
-        max_steps: int = 3,
-    ) -> List[Dict[str, Any]]:
+        anth_tools = []
+        for t in (tools or []):
+            if "function" in t:  # OpenAI-style wrapper
+                fn = t["function"]
+                anth_tools.append({
+                    "name": fn["name"],
+                    "description": fn.get("description", ""),
+                    "input_schema": fn.get("parameters", {"type": "object"}),
+                })
+            elif "parameters" in t:  # our flat/OpenAI-like
+                anth_tools.append({
+                    "name": t["name"],
+                    "description": t.get("description", ""),
+                    "input_schema": t.get("parameters", {"type": "object"}),
+                })
+            else:  # assume Anthropic-native
+                # ensure input_schema exists
+                schema = t.get("input_schema")
+                if not schema:
+                    raise ValueError(f"Anthropic tool '{t.get('name','<no-name>')}' missing input_schema")
+                anth_tools.append({
+                    "name": t["name"],
+                    "description": t.get("description", ""),
+                    "input_schema": schema,
+                })
+        return anth_tools
+    
+    def run_loop(self, messages: List[Dict[str, Any]], tools: List[Dict[str, Any]],
+                 tool_registry, max_steps: int = 2):
         """
-        Anthropic tool-use 메시지 루프.
-        - 단순화를 위해 최대 max_steps까지만 반복.
+        messages: [{"role":"user"|"assistant", "content":[{"type":"text","text":...}, ...]}]
+        tools: Anthropic 'tools' 스키마 (name/description/input_schema)
         """
-        # system 추출
-        system_texts = [m["content"] for m in messages if m.get("role") == "system"]
-        system_prompt = "\n".join(system_texts) if system_texts else None
 
-        converted = self._convert_to_anthropic_messages(messages)
-
-        for _ in range(max_steps):
+        # 초기 호출 (user 메시지 + tools)
+        for step in range(max_steps):
             resp = self.client.messages.create(
                 model=self.model,
-                max_tokens=800,
-                temperature=0.3,
-                system=system_prompt,
-                messages=converted,
-                tools=[{"name": t["name"], "description": t.get("description", ""), "input_schema": t["parameters"]} for t in tools],
+                max_tokens=self.max_tokens,
+                messages=messages,             # role: user/assistant only
+                tools=self._to_anthropic_tools(tools)  # <-- 여기
             )
+            # Anthropic SDK 응답은 resp.content = [blocks...], resp.stop_reason 등 포함
+            assistant_msg = {
+                "role": "assistant",
+                "content": resp.content,
+            }
+            messages.append(assistant_msg)
 
-            # Claude 응답 파싱
-            # resp.content는 block들의 리스트 (text/tool_use 등)
-            assistant_msg = {"role": "assistant", "content": "", "tool_calls": []}
-            tool_uses = []
-            text_chunks = []
-            for block in resp.content:
-                if block.type == "tool_use":
-                    tool_uses.append(block)
-                elif block.type == "text":
-                    text_chunks.append(block.text or "")
-
-            assistant_msg["content"] = "\n".join(text_chunks).strip()
-            converted.append({"role": "assistant", "content": assistant_msg["content"]})
-
+            # tool_use 요청이 없으면 종료
+            tool_uses = [b for b in resp.content if b.get("type") == "tool_use"]
             if not tool_uses:
-                # 최종 텍스트 응답
-                messages.append(assistant_msg)
                 break
 
-            # 각 tool_use 실행하고 tool_result 추가
+            # (1) 각 tool_use 실행
+            tool_results_blocks = []
             for tu in tool_uses:
-                name = tu.name
-                args = tu.input or {}
-                if name not in tool_registry:
-                    output = {"error": f"Tool '{name}' not implemented"}
-                else:
-                    try:
-                        output = {"ok": True, "result": tool_registry[name](args)}
-                    except Exception as e:  # noqa: BLE001
-                        output = {"ok": False, "error": str(e)}
+                tool_name = tu["name"]
+                tool_input = tu.get("input", {})
+                tool_use_id = tu["id"]
 
-                # Anthropic 형식의 tool_result
-                converted.append(
-                    {
-                        "role": "tool",
-                        "tool_use_id": tu.id,
-                        "content": str(output),
-                        "name": name,
-                    }
-                )
+                # 실제 도구 실행
+                result = tool_registry.call(tool_name, tool_input)
+
+                # (2) 결과를 user 메시지의 tool_result 블록으로 전달
+                # 주의: role="tool" 아님! role="user" + content=[{"type":"tool_result", ...}]
+                # 여기에 추가 텍스트를 넣고 싶다면 반드시 tool_result 뒤에 위치시켜야 함.
+                # 예: [{"type":"tool_result", ...}, {"type":"text","text":"...next"}]
+                block = {
+                    "type": "tool_result",
+                    "tool_use_id": tool_use_id,
+                    "content": str(result) if not isinstance(result, list) else result
+                }
+                tool_results_blocks.append(block)
+
+            # 모든 결과를 "단일 user 메시지"로 한 번에 붙이기(병렬 도구 사용에 권장)
+            messages.append({
+                "role": "user",
+                "content": tool_results_blocks
+            })
 
         return messages
