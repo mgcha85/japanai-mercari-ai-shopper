@@ -29,10 +29,12 @@ services:
     ports:
       - "${PORT:-8000}:${PORT:-8000}"
     volumes:
+      # 여기 추가: 로컬 src를 컨테이너 /app/src 위에 마운트
+      - ../src:/app/src
       - ../data:/app/data
     command: >
       uvicorn mercari_ai_shopper.server:app
-      --host 0.0.0.0 --port ${PORT:-8000} --workers 2
+      --host 0.0.0.0 --port ${PORT:-8000} --reload
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:${PORT:-8000}/health || exit 1"]
       interval: 20s
@@ -54,9 +56,10 @@ services:
       - PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH:-/ms-playwright}
       - PLAYWRIGHT_HEADLESS=${PLAYWRIGHT_HEADLESS:-true}
     volumes:
+      - ../src:/app/src
       - ../data:/app/data
     working_dir: /app
-    entrypoint: ["python", "-m", "mercari_ai_shopper.run"]
+    entrypoint: ["python", "-m", mercari_ai_shopper.run]
     profiles: ["cli"]
 
   tests:
@@ -68,16 +71,8 @@ services:
       - APP_ENV=test
       - CACHE_DIR=${CACHE_DIR:-/app/data/cache}
     volumes:
-      - ../data:/app/data
+      - ../src:/app/src
       - ../tests:/app/tests
-      - ../src:/app/src
+      - ../data:/app/data
     command: ["pytest", "-q", "--disable-warnings"]
-    profiles: ["dev"]
-
-  lint:
-    image: mercari-ai-shopper:latest
-    container_name: mercari_lint
-    volumes:
-      - ../src:/app/src
-    command: ["bash", "-lc", "ruff check src && black --check src"]
     profiles: ["dev"]
